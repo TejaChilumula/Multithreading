@@ -14,6 +14,12 @@
 using namespace std;
 
 
+
+// class for the Thread Pool, it should have the 
+/* Constructor -to define the threads and to make the thread work
+
+    Destructor - to destroy all the threads after finishing its tasks
+*/
 class ThreadPool{
 public:
     ThreadPool(size_t numThreads);
@@ -32,6 +38,20 @@ private:
 
     };
 
+/*
+    - So,   vector<thread> threads ---> stores the threads
+    - so how to initialise the thread ?
+        whenever we are adding the thread to the queue, you are defining the thread, 
+        so, it automatically starts running.
+
+        Each, thread will have all the
+        while(true){ ..... } , 10 Threads ---> each of while{....} 
+
+        Each Thread
+            - waits on the cv, 
+            -      then takes the function from the task<function<void()>>
+            - and executs the task()
+*/
 ThreadPool::ThreadPool(size_t numThreads) {
     for (size_t i = 0; i < numThreads; ++i) {
         threads.emplace_back([this]() {
@@ -71,6 +91,29 @@ ThreadPool::ThreadPool(size_t numThreads) {
         }
 
     }
+
+
+
+    /*
+        Template based function
+         - Where you accepts any class or lambda or fun and Args...
+               - return the future so you cant give the actual return type at the start so we do
+               """ Trailing return Type"""
+        1. We use the return_type of the F we get as arg
+        2. We bind the function and args using bind()
+            - We pack the task -- to get the future result using package_task()
+            - we then  make_shared() ptr so that we can move the ptr not to copy
+        
+        Then ...
+          *********IMPPPPP***********
+
+           tasks.emplace([task]() {(*task)(); });
+
+           [task] - this is outside of lambda, so we tell, we are using task
+           () - no Args
+            (*task) -> task is a shared_ptr so, use *
+            () -> actually calling the function task ,, i.e. task() !
+    */
 
     template<class F, class... Args>
     auto ThreadPool::ExecuteTask(F&& f, Args&&... args) -> future<decltype(f(args...))>{
