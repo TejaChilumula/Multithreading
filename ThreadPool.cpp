@@ -8,8 +8,8 @@
 #include<utility>
 #include<chrono>
 #include<future>
-#include<future>
 #include<iostream>
+#include<atomic>
 
 using namespace std;
 
@@ -77,14 +77,14 @@ ThreadPool::ThreadPool(size_t numThreads) {
         using return_type = decltype(f(args...));
 
         auto task = make_shared<packaged_task<return_type()>>(
-            bind(forward<F>(f), forward<Args>(args)...)
+            bind(std::forward<F>(f), std::forward<Args>(args)...)
         );
 
         future<return_type> res = task->get_future();
 
         {
             unique_lock<mutex> lock(mtx);
-            tasks.emplace([tasks]() {(*task)(); });
+            tasks.emplace([task]() {(*task)(); });
         }
 
         cv.notify_one();
@@ -97,27 +97,30 @@ int Func(int x){
 }
 
 
+int main() {
+    ThreadPool pool(4);
 
-int main(){
-    ThreadPool pool(16);
+    std::atomic<int> taskId{1};
 
-    std::vector<std::future<int>> futures;
+    for (int i = 1; i <= 100; ++i) {
+        int id = taskId++;
+        pool.ExecuteTask([id]() {
+            std::ostringstream log;
+            log << "🟡 Thread " << std::this_thread::get_id()
+                << " picked Task " << id << "\n";
+            std::cout << log.str();
 
-    // Simulate incoming requests
-    for (int i = 1; i <= 10; ++i) {
-        std::cout << "Submitting task " << i << std::endl;
-        futures.push_back(pool.ExecuteTask(Func, i));
+            std::this_thread::sleep_for(std::chrono::milliseconds(300)); // Simulate work
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));  // simulate delay between tasks
+            log.str("");
+            log << "✅ Thread " << std::this_thread::get_id()
+                << " completed Task " << id << "\n";
+            std::cout << log.str();
+        });
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Stagger tasks
     }
 
-    // Collect results
-    for (int i = 0; i < futures.size(); ++i) {
-        std::cout << "Result for task " << i+1 << ": " << futures[i].get() << std::endl;
-    }
-
-    std::cout << "All tasks completed.\n";
-
+    std::this_thread::sleep_for(std::chrono::seconds(5)); // Allow time for all tasks to finish
     return 0;
-
 }
