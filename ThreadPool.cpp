@@ -100,13 +100,22 @@ int Func(int x){
 int main(){
     ThreadPool pool(16);
 
-    future<int> res = pool.ExecuteTask(Func, 2);
+    std::vector<std::future<int>> futures;
 
-    cout<<"result is :"<<res.get()<<endl;
+    // Simulate incoming requests
+    for (int i = 1; i <= 10; ++i) {
+        std::cout << "Submitting task " << i << std::endl;
+        futures.push_back(pool.ExecuteTask(Func, i));
 
-    while(1){
-
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));  // simulate delay between tasks
     }
+
+    // Collect results
+    for (int i = 0; i < futures.size(); ++i) {
+        std::cout << "Result for task " << i+1 << ": " << futures[i].get() << std::endl;
+    }
+
+    std::cout << "All tasks completed.\n";
 
     return 0;
 
