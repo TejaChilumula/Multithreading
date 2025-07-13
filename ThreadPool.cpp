@@ -31,29 +31,30 @@ private:
 
     };
 
-    ThreadPool::ThreadPool(size_t numThreads){
-        for(size_t i=0;i<numThreads;++i){
-            threads.emplace_back([this](){
+ThreadPool::ThreadPool(size_t numThreads) {
+    for (size_t i = 0; i < numThreads; ++i) {
+        threads.emplace_back([this]() {
+            std::function<void()> task;
+
+            while (true) {
+                std::unique_lock<std::mutex> lock(mtx);
+                cv.wait(lock, [this]() {
+                    return stop || !tasks.empty();
+                });
+
+                if (stop && tasks.empty())
+                    return;  // ✅ void return only
+
+                task = std::move(tasks.front());
+                tasks.pop();
                 
-                    function<void()> task;
-
-                    while(true){
-                        unique_lock<mutex> lock(mtx);
-                        cv.wait(lock, [this](){
-                            return stop || !tasks.empty();
-                        });
-
-                        if(stop && tasks.empty()) return false;
-
-                        task = move(tasks.front());
-                        tasks.pop();
-                    }
-
-                    task();
-                
-            });
-        }
+                lock.unlock();  // optional: release early
+                task();
+            }
+        });
     }
+}
+
 
     ThreadPool::~ThreadPool(){
         {
@@ -72,15 +73,41 @@ private:
 
     template<class F, class... Args>
     auto ThreadPool::ExecuteTask(F&& f, Args&&... args) -> future<decltype(f(args...))>{
-        using return_type = 
-    }
+        using return_type = decltype(f(args...));
 
+        auto task = make_shared<packaged_task<return_type()>>(
+            bind(forward<F>(f), forward<Args>(args)...)
+        );
 
+        future<return_type> res = task->get_future();
 
+        {
+            unique_lock<mutex> lock(mtx);
+            tasks.emplace([tasks]() {(*task)(); });
+        }
+
+        cv.notify_one();
+        return res;
+    
+}
+
+int Func(int x){
+    return x*2;
+}
 
 
 
 int main(){
+    ThreadPool pool(16);
 
+    future<int> res = pool.ExecuteTask(Func, 2);
+
+    cout<<"result is :"<<res.get()<<endl;
+
+    while(1){
+
+    }
+
+    return 0;
 
 }
